@@ -1,0 +1,260 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  annotations:
+    meta.helm.sh/release-name: platform-db
+    meta.helm.sh/release-namespace: ns-sy-ros-platbundle
+  creationTimestamp: "2023-12-02T08:08:00Z"
+  generation: 1
+  labels:
+    app.kubernetes.io/managed-by: Helm
+  name: platform-db-mysqlinnocluster-node
+  namespace: ns-sy-ros-platbundle
+  resourceVersion: "383687811"
+  uid: 128e3d59-5f1a-4298-a06c-e5fcd961f887
+spec:
+  podManagementPolicy: Parallel
+  replicas: 3
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: platform-db-mysqlinnocluster-inno-cluster
+  serviceName: platform-db-mysqlinnocluster-inno-cluster
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/restartedAt: "2023-12-02T08:25:36+01:00"
+        prometheus.io/port: "9104"
+        prometheus.io/scrape: "true"
+        robin.io/rpool: rp-basic-00
+      creationTimestamp: null
+      labels:
+        app: platform-db-mysqlinnocluster-inno-cluster
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - platform-db-mysqlinnocluster-inno-cluster
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - env:
+        - name: MYSQL_SHUT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: SHUT_ROOT_PASSWORD
+              name: platform-db-mysqlinnocluster-mysql-rootuser-secret
+        - name: MYSQL_SHUT_USER
+          valueFrom:
+            secretKeyRef:
+              key: SHUT_USER
+              name: platform-db-mysqlinnocluster-mysql-rootuser-secret
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: ROOT_PASSWORD
+              name: platform-db-mysqlinnocluster-mysql-rootuser-secret
+        - name: INNODB_CLUSTER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: INNODB_PASSWORD
+              name: platform-db-mysqlinnocluster-mysql-rootuser-secret
+        - name: INNODB_CLUSTER_USER
+          valueFrom:
+            secretKeyRef:
+              key: INNODB_USER
+              name: platform-db-mysqlinnocluster-mysql-rootuser-secret
+        - name: MULTI_PRIMARY_MODE
+          value: "false"
+        - name: GR_IP_WHITELIST
+          value: 2000::/3
+        - name: AUTOMATE_INNODB_CLUSTER_CREATION
+          value: "true"
+        - name: INFRA_K8s_CLUSTERNAME
+          value: ns-sy-ros-platbundle-platform-db
+        image: cdc-docker.rartifactory.rp.de.1u1.local/symphony-oss/mysql_cluster/mysql-server:8.0.26_3.0
+        imagePullPolicy: IfNotPresent
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - bash
+              - /pre-destroy-secret.sh
+        name: mysqlinnocluster
+        ports:
+        - containerPort: 1122
+          name: mysql
+          protocol: TCP
+        - containerPort: 11220
+          name: mysqlx
+          protocol: TCP
+        - containerPort: 11221
+          name: mysqladmin
+          protocol: TCP
+        resources:
+          limits:
+            cpu: "8"
+            memory: 20Gi
+          requests:
+            cpu: "8"
+            memory: 20Gi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /mysql_datadir
+          name: platform-db-mysqlinnocluster
+        - mountPath: /mysql_temp_init_files/server.cnf
+          name: server-conf
+          subPath: server.cnf
+        - mountPath: /mysql_temp_init_files/common.cnf
+          name: common-cnf-configmap
+          subPath: common.cnf
+        - mountPath: /mysql_temp_init_files/0-init-user.sql
+          name: 0-init-user-secret
+          subPath: 0-init-user.sql
+        - mountPath: /mnt/init-innodb-cluster.sh
+          name: init-innodb-cluster-sh-secret
+          subPath: init-innodb-cluster.sh
+        - mountPath: /mysql-pem-files
+          name: mysql-pem-secrets
+        - mountPath: /docker-entrypoint-initdb.d/1-init-sqldump-pemfiles-sh-configmap.sh
+          name: 1-init-sqldump-pemfiles-sh-configmap
+          subPath: 1-init-sqldump-pemfiles-sh-configmap.sh
+        - mountPath: /mysql_sqldump
+          name: mysql-sqldump-configmap
+        - mountPath: /pre-destroy-secret.sh
+          name: pre-destroy-secret
+          subPath: pre-destroy-secret.sh
+        - mountPath: /entrypoint.sh
+          name: entrypoint-sh-configmap
+          subPath: entrypoint.sh
+        - mountPath: /etc/localtime
+          name: tz-tokyo
+        - mountPath: /mnt/pmm_setup.sh
+          name: pmm-setup-config
+          subPath: pmm_setup.sh
+      - env:
+        - name: DATA_SOURCE_NAME
+          value: prometheous_exporter:Promexport123@(localhost:1122)/
+        image: cdc-docker.rartifactory.rp.de.1u1.local/symphony-oss/mysql_cluster/mysqld-exporter:v0.14.0
+        imagePullPolicy: IfNotPresent
+        name: mysqld-exporter
+        ports:
+        - containerPort: 9104
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 500m
+            memory: 500Mi
+          requests:
+            cpu: 250m
+            memory: 250Mi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      hostAliases:
+      - hostnames:
+        - cdc2-tn-sy-ros-platbundle
+        ip: '2a00:0fbc:3110:14a8:b405:22::'
+      initContainers:
+      - command:
+        - bash
+        - -c
+        - "set -ex\n\n# Generate mysql server-id from pod ordinal index.\n[[ $HOSTNAME
+          =~ -([0-9]+)$ ]] || exit 1\n\nordinal=${BASH_REMATCH[1]}\n\necho [mysqld]
+          > /mnt/server.cnf\n\n# Add an offset to avoid reserved server-id=0 value.\necho
+          server-id=$(($SERVER_ID_OFFSET + $ordinal))    >> /mnt/server.cnf\necho
+          \"report_host='$HOSTNAME'\"         >> /mnt/server.cnf\ncp /mnt/server.cnf
+          /mnt/conf.d/\n\n# debug\necho 'Below is the content of genereted mysql cnf
+          file:'\ncat /mnt/server.cnf \n"
+        env:
+        - name: SERVER_ID_OFFSET
+          value: "100"
+        image: cdc-docker.rartifactory.rp.de.1u1.local/symphony-oss/mysql_cluster/bash:5.1.8
+        imagePullPolicy: IfNotPresent
+        name: init-mysql
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /mnt/conf.d
+          name: server-conf
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 1800
+      volumes:
+      - emptyDir: {}
+        name: server-conf
+      - configMap:
+          defaultMode: 420
+          name: platform-db-mysqlinnocluster-common-cnf-configmap
+        name: common-cnf-configmap
+      - name: 0-init-user-secret
+        secret:
+          defaultMode: 420
+          secretName: platform-db-mysqlinnocluster-0-init-user-secret
+      - name: init-innodb-cluster-sh-secret
+        secret:
+          defaultMode: 420
+          secretName: platform-db-mysqlinnocluster-init-innodb-cluster-sh-secret
+      - name: mysql-pem-secrets
+        secret:
+          defaultMode: 420
+          secretName: platform-db-mysqlinnocluster-mysql-pem-secrets
+      - configMap:
+          defaultMode: 420
+          name: platform-db-mysqlinnocluster-1-init-sqldump-pemfiles-sh-configmap
+        name: 1-init-sqldump-pemfiles-sh-configmap
+      - configMap:
+          defaultMode: 420
+          name: platform-db-mysqlinnocluster-mysql-sqldump-configmap
+        name: mysql-sqldump-configmap
+      - name: pre-destroy-secret
+        secret:
+          defaultMode: 420
+          secretName: platform-db-mysqlinnocluster-pre-destroy-secret
+      - configMap:
+          defaultMode: 493
+          name: platform-db-mysqlinnocluster-entrypoint-sh-configmap
+        name: entrypoint-sh-configmap
+      - hostPath:
+          path: /usr/share/zoneinfo/UTC
+          type: ""
+        name: tz-tokyo
+      - configMap:
+          defaultMode: 493
+          name: platform-db-mysqlinnocluster-pmm-setup-configmap
+        name: pmm-setup-config
+  updateStrategy:
+    type: OnDelete
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      annotations:
+        robin.io/rpool: rp-basic-00
+      creationTimestamp: null
+      name: platform-db-mysqlinnocluster
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 100Gi
+      storageClassName: robin
+      volumeMode: Filesystem
+    status:
+      phase: Pending
+status:
+  collisionCount: 0
+  currentReplicas: 3
+  currentRevision: platform-db-mysqlinnocluster-node-7c5c7968c7
+  observedGeneration: 1
+  replicas: 3
+  updateRevision: platform-db-mysqlinnocluster-node-7c5c7968c7
+  updatedReplicas: 3
