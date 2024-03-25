@@ -26,7 +26,7 @@ spec:
         kubectl.kubernetes.io/restartedAt: "2023-12-02T08:25:36+01:00"
         prometheus.io/port: "9104"
         prometheus.io/scrape: "true"
-        robin.io/rpool: rp-basic-00
+        vlad.io/rpool: vlad-pool
       creationTimestamp: null
       labels:
         app: platform-db-mysqlinnocluster-inno-cluster
@@ -237,7 +237,7 @@ spec:
     kind: PersistentVolumeClaim
     metadata:
       annotations:
-        robin.io/rpool: rp-basic-00
+        vlad.io/rpool: vlad-pool
       creationTimestamp: null
       name: platform-db-mysqlinnocluster
     spec:
@@ -246,7 +246,7 @@ spec:
       resources:
         requests:
           storage: 100Gi
-      storageClassName: robin
+      storageClassName: vlad
       volumeMode: Filesystem
     status:
       phase: Pending
