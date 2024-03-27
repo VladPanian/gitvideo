@@ -27,7 +27,7 @@ spec:
         prometheus.io/port: "9104"
         prometheus.io/scrape: "true"
         vlad.io/rpool: vlad-pool
-      creationTimestamp: null
+      creationTimestamp:
       labels:
         app: platform-db-mysqlinnocluster-inno-cluster
     spec:
